@@ -7,3 +7,4 @@ grpcio==1.63.0
 grpcio_tools==1.63.0
 gradio==4.31.5
 cachetools==5.3.3
+dlib==19.24.1
