@@ -1,3 +1,4 @@
+import hashlib
 import os
 from io import BytesIO
 
@@ -5,7 +6,6 @@ import gradio as gr
 import grpc
 from PIL import Image
 from cachetools import LRUCache
-import hashlib
 
 from inference_pb2 import HairSwapRequest, HairSwapResponse
 from inference_pb2_grpc import HairSwapServiceStub
@@ -61,9 +61,13 @@ def resize(name):
     return resize_inner
 
 
-def swap_hair(face, shape, color, blending, poisson_iters, poisson_erosion, progress=gr.Progress(track_tqdm=True)):
-    if not face or not shape and not color:
-        raise ValueError("Need to upload a face and at least a shape or color")
+def swap_hair(face, shape, color, blending, poisson_iters, poisson_erosion):
+    if not face and not shape and not color:
+        return gr.update(visible=False), gr.update(value="Need to upload a face and at least a shape or color ❗", visible=True)
+    elif not face:
+        return gr.update(visible=False), gr.update(value="Need to upload a face ❗", visible=True)
+    elif not shape and not color:
+        return gr.update(visible=False), gr.update(value="Need to upload at least a shape or color ❗", visible=True)
 
     face_bytes, shape_bytes, color_bytes = map(lambda item: get_bytes(item), (face, shape, color))
 
@@ -81,7 +85,7 @@ def swap_hair(face, shape, color, blending, poisson_iters, poisson_erosion, prog
         )
 
     output = bytes_to_image(output.image)
-    return output
+    return gr.update(value=output, visible=True), gr.update(visible=False)
 
 
 def get_demo():
@@ -98,22 +102,24 @@ def get_demo():
         )
         with gr.Row():
             with gr.Column():
-                source = gr.Image(label="Photo that you want to replace the hair", type="pil")
+                source = gr.Image(label="Source photo to try on the hairstyle", type="pil")
                 with gr.Row():
-                    shape = gr.Image(label="Reference hair you want to get (optional)", type="pil")
-                    color = gr.Image(label="Reference color hair you want to get (optional)", type="pil")
+                    shape = gr.Image(label="Shape photo with desired hairstyle (optional)", type="pil")
+                    color = gr.Image(label="Color photo with desired hair color (optional)", type="pil")
                 with gr.Accordion("Advanced Options", open=False):
                     blending = gr.Radio(["Article", "Alternative_v1", "Alternative_v2"], value='Article',
-                                        label="Blending version", info="Selects a model for hair color transfer.")
+                                        label="Color Encoder version", info="Selects a model for hair color transfer.")
                     poisson_iters = gr.Slider(0, 2500, value=0, step=1, label="Poisson iters",
                                               info="The power of blending with the original image, helps to recover more details. Not included in the article, disabled by default.")
                     poisson_erosion = gr.Slider(1, 100, value=15, step=1, label="Poisson erosion",
                                                 info="Smooths out the blending area.")
                     align = gr.CheckboxGroup(["Face", "Shape", "Color"], value=["Face", "Shape", "Color"],
-                                             label="Image cropping [recommended]", info="Selects which images to crop by face")
+                                             label="Image cropping [recommended]",
+                                             info="Selects which images to crop by face")
                 btn = gr.Button("Get the haircut")
             with gr.Column():
                 output = gr.Image(label="Your result")
+                error_message = gr.Textbox(label="⚠️ Error ⚠️", visible=False, elem_classes="error-message")
 
         gr.Examples(examples=[["input/0.png", "input/1.png", "input/2.png"], ["input/6.png", "input/7.png", None],
                               ["input/10.jpg", None, "input/11.jpg"]],
@@ -123,7 +129,8 @@ def get_demo():
         shape.upload(fn=resize('Shape'), inputs=[shape, align], outputs=shape)
         color.upload(fn=resize('Color'), inputs=[color, align], outputs=color)
 
-        btn.click(fn=swap_hair, inputs=[source, shape, color, blending, poisson_iters, poisson_erosion], outputs=output)
+        btn.click(fn=swap_hair, inputs=[source, shape, color, blending, poisson_iters, poisson_erosion],
+                  outputs=[output, error_message])
 
         gr.Markdown('''To cite the paper by the authors
     ```
