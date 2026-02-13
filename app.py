@@ -10,7 +10,10 @@ from cachetools import LRUCache
 from inference_pb2 import HairSwapRequest, HairSwapResponse
 from inference_pb2_grpc import HairSwapServiceStub
 from utils.shape_predictor import align_face
+from huggingface_hub.utils import HF_HOME
+import os
 
+token_path = os.path.join(HF_HOME, "token")
 
 def get_bytes(img):
     if img is None:
